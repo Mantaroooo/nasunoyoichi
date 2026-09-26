@@ -1,1 +1,529 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>与一の鬼退治 - 弓矢ゲーム</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      touch-action: none; /* タッチイベントのデフォルト動作を無効化 */
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Hiragino Maru Gothic ProN', sans-serif;
+      background: linear-gradient(to bottom, #1e293b, #0f172a);
+      color: white;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
 
+    /* UIヘッダー */
+    .header {
+      width: 100%;
+      max-width: 500px;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+    .title { font-size: 18px; font-weight: bold; color: #f59e0b; margin: 0; }
+    .score { font-size: 16px; font-weight: bold; background: rgba(255,255,255,0.1); padding: 5px 15px; border-radius: 20px; }
+
+    /* ゲームステージ（キャンバスエリア） */
+    .stage-container {
+      position: relative;
+      width: 100%;
+      max-width: 450px;
+      height: 80vh;
+      background: linear-gradient(to bottom, #0284c7 0%, #38bdf8 60%, #15803d 60%, #166534 100%);
+      border-radius: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* メッセージ・モーダル */
+    .msg-overlay {
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 32px;
+      font-weight: bold;
+      color: #fde047;
+      text-shadow: 0 4px 10px rgba(0,0,0,0.8);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .msg-overlay.show {
+      opacity: 1;
+      transform: translate(-50%, -60%) scale(1.2);
+    }
+
+    /* 再戦ボタン */
+    .btn-reset {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 30px;
+      font-size: 18px;
+      font-weight: bold;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      cursor: pointer;
+      display: none;
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1 class="title">🏹 よいちの おにたいじ</h1>
+    <div class="score">たおした数: <span id="kill-count">0</span></div>
+  </div>
+
+  <div class="stage-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="hit-msg" class="msg-overlay">きゅうしょ に めいちゅう！</div>
+    <button id="reset-btn" class="btn-reset" onclick="resetGame()">もう一度あそぶ</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const killCountEl = document.getElementById('kill-count');
+    const hitMsgEl = document.getElementById('hit-msg');
+    const resetBtn = document.getElementById('reset-btn');
+
+    // 画面サイズの調整
+    let W, H;
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      W = canvas.width = rect.width;
+      H = canvas.height = rect.height;
+    }
+    window.addEventListener('resize', resize);
+
+    // 音声効果（Web Audio API）
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSfx(type) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'shoot') { // 弓を放つ音
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+      } else if (type === 'critical') { // 急所ヒット音
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+      } else if (type === 'hit') { // 通常ヒット音
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+      }
+    }
+
+    // 音声読み上げ
+    function speak(text) {
+      window.speechSynthesis.cancel();
+      const uttr = new SpeechSynthesisUtterance(text);
+      uttr.lang = 'ja-JP';
+      uttr.rate = 1.0;
+      window.speechSynthesis.speak(uttr);
+    }
+
+    // ゲーム状態
+    let kills = 0;
+    let arrow = null; // 飛行中の矢
+    let isPulling = false;
+    let pullStart = { x: 0, y: 0 };
+    let pullCurrent = { x: 0, y: 0 };
+
+    // 那須与一（プレイヤー）の配置位置
+    const yoichi = { x: 0, y: 0 };
+
+    // 鬼オブジェクト
+    let oni = {
+      x: 0, y: 0,
+      radius: 35,
+      hp: 3,
+      maxHp: 3,
+      vx: 2,
+      isDead: false
+    };
+
+    function initOni() {
+      oni.x = W * 0.2 + Math.random() * (W * 0.6);
+      oni.y = H * 0.25;
+      oni.hp = 3;
+      oni.maxHp = 3;
+      oni.vx = (Math.random() > 0.5 ? 1 : -1) * (1.5 + kills * 0.3); // たおす毎に速くなる
+      oni.isDead = false;
+    }
+
+    // 操作（ひっぱり）処理
+    function setupInput() {
+      const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+      };
+
+      const startPull = (e) => {
+        if (arrow || oni.isDead) return;
+        const pos = getPos(e);
+        // 与一くんの近くをタッチしたか判定
+        if (Math.hypot(pos.x - yoichi.x, pos.y - yoichi.y) < 80) {
+          isPulling = true;
+          pullStart = { x: yoichi.x, y: yoichi.y };
+          pullCurrent = pos;
+        }
+      };
+
+      const movePull = (e) => {
+        if (!isPulling) return;
+        pullCurrent = getPos(e);
+      };
+
+      const endPull = () => {
+        if (!isPulling) return;
+        isPulling = false;
+
+        // 引いたベクトルから飛距離と角度を計算
+        const dx = pullStart.x - pullCurrent.x;
+        const dy = pullStart.y - pullCurrent.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 20) { // 最低限ひっぱった場合発射
+          const speed = Math.min(dist * 0.18, 22);
+          const angle = Math.atan2(dy, dx);
+          
+          arrow = {
+            x: yoichi.x,
+            y: yoichi.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            angle: angle
+          };
+          playSfx('shoot');
+        }
+      };
+
+      canvas.addEventListener('mousedown', startPull);
+      canvas.addEventListener('mousemove', movePull);
+      canvas.addEventListener('mouseup', endPull);
+
+      canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startPull(e); });
+      canvas.addEventListener('touchmove', (e) => { e.preventDefault(); movePull(e); });
+      canvas.addEventListener('touchend', endPull);
+    }
+
+    // 描画：那須与一
+    function drawYoichi() {
+      ctx.save();
+      ctx.translate(yoichi.x, yoichi.y);
+
+      // 着物・陣羽織
+      ctx.fillStyle = '#1e3a8a'; // 紺色の着物
+      ctx.beginPath();
+      ctx.arc(0, 15, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 顔
+      ctx.fillStyle = '#ffedd5';
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 髪型・烏帽子
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(0, -6, 18, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-8, -25, 16, 15); // 烏帽子
+
+      // 目
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(-6, -2, 2.5, 0, Math.PI * 2);
+      ctx.arc(6, -2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 和風弓
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 35, -Math.PI * 0.6, Math.PI * 0.6);
+      ctx.stroke();
+
+      // 弦（ひっぱり中）
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const topX = 35 * Math.cos(-Math.PI * 0.6);
+      const topY = 35 * Math.sin(-Math.PI * 0.6);
+      const botX = 35 * Math.cos(Math.PI * 0.6);
+      const botY = 35 * Math.sin(Math.PI * 0.6);
+
+      ctx.moveTo(topX, topY);
+      if (isPulling) {
+        // 指の位置へ弦がしなる
+        const localX = pullCurrent.x - yoichi.x;
+        const localY = pullCurrent.y - yoichi.y;
+        ctx.lineTo(localX, localY);
+        ctx.lineTo(botX, botY);
+      } else {
+        ctx.lineTo(botX, botY);
+      }
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // 描画：鬼（赤鬼）
+    function drawOni() {
+      if (oni.isDead) return;
+
+      ctx.save();
+      ctx.translate(oni.x, oni.y);
+
+      // 体（胴体）
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(0, 15, oni.radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 頭部（急所エリア）
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(0, -10, oni.radius * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 鬼の角（頭頂部）
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.moveTo(-8, -25);
+      ctx.lineTo(0, -45);
+      ctx.lineTo(8, -25);
+      ctx.closePath();
+      ctx.fill();
+
+      // 目と口
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(-10, -12, 6, 0, Math.PI * 2);
+      ctx.arc(10, -12, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(-10, -12, 3, 0, Math.PI * 2);
+      ctx.arc(10, -12, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 牙
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-12, 5); ctx.lineTo(12, 5);
+      ctx.stroke();
+
+      // HPバー表示
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(-25, -55, 50, 6);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(-25, -55, (50 * (oni.hp / oni.maxHp)), 6);
+
+      ctx.restore();
+    }
+
+    // 描画：軌道予測線（ひっぱり中）
+    function drawTrajectory() {
+      if (!isPulling) return;
+
+      const dx = pullStart.x - pullCurrent.x;
+      const dy = pullStart.y - pullCurrent.y;
+      const speed = Math.min(Math.hypot(dx, dy) * 0.18, 22);
+      const angle = Math.atan2(dy, dx);
+
+      let simX = yoichi.x;
+      let simY = yoichi.y;
+      let simVx = Math.cos(angle) * speed;
+      let simVy = Math.sin(angle) * speed;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      for (let i = 0; i < 15; i++) {
+        simX += simVx;
+        simY += simVy;
+        simVy += 0.25; // 重力影響
+        ctx.beginPath();
+        ctx.arc(simX, simY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 描画：矢
+    function drawArrow() {
+      if (!arrow) return;
+
+      ctx.save();
+      ctx.translate(arrow.x, arrow.y);
+      ctx.rotate(arrow.angle);
+
+      // 矢のシャフト（竹）
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-20, 0); ctx.lineTo(15, 0);
+      ctx.stroke();
+
+      // 矢尻（鉄）
+      ctx.fillStyle = '#94a3b8';
+      ctx.beginPath();
+      ctx.moveTo(15, -4); ctx.lineTo(25, 0); ctx.lineTo(15, 4);
+      ctx.closePath();
+      ctx.fill();
+
+      // 矢羽（白）
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(-20, 0); ctx.lineTo(-25, -5); ctx.lineTo(-18, 0); ctx.lineTo(-25, 5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // メッセージ表示アニメーション
+    function showHitMsg(text) {
+      hitMsgEl.innerText = text;
+      hitMsgEl.classList.add('show');
+      setTimeout(() => hitMsgEl.classList.remove('show'), 1200);
+    }
+
+    // メインゲームループ
+    function gameLoop() {
+      ctx.clearRect(0, 0, W, H);
+
+      // 与一の位置設定（画面下部中央）
+      yoichi.x = W / 2;
+      yoichi.y = H - 80;
+
+      // 鬼の移動更新
+      if (!oni.isDead) {
+        oni.x += oni.vx;
+        if (oni.x - oni.radius < 10 || oni.x + oni.radius > W - 10) {
+          oni.vx *= -1; // 壁で跳ね返り
+        }
+      }
+
+      // 矢の位置更新と当たり判定
+      if (arrow) {
+        arrow.x += arrow.vx;
+        arrow.y += arrow.vy;
+        arrow.vy += 0.25; // 重力で放物線を描く
+        arrow.angle = Math.atan2(arrow.vy, arrow.vx);
+
+        // 鬼との当たり判定
+        if (!oni.isDead) {
+          const distToCenter = Math.hypot(arrow.x - oni.x, arrow.y - oni.y);
+          const distToHead = Math.hypot(arrow.x - oni.x, arrow.y - (oni.y - 20)); // 頭部（急所）
+
+          if (distToHead < 18) {
+            // 急所（一撃必殺！）
+            oni.hp = 0;
+            oni.isDead = true;
+            arrow = null;
+            playSfx('critical');
+            showHitMsg("🎯 急所にあたった！一撃必殺！");
+            speak("すごい！きゅうしょに めいちゅう！");
+            onKillOni();
+          } else if (distToCenter < oni.radius) {
+            // 胴体ヒット
+            oni.hp -= 1;
+            arrow = null;
+            if (oni.hp <= 0) {
+              oni.isDead = true;
+              playSfx('critical');
+              showHitMsg("おにを たおした！");
+              speak("やったね！おにを たおしたよ！");
+              onKillOni();
+            } else {
+              playSfx('hit');
+              showHitMsg("ヒット！");
+            }
+          }
+        }
+
+        // 画面外に飛んで行った場合
+        if (arrow && (arrow.x < -50 || arrow.x > W + 50 || arrow.y > H + 50)) {
+          arrow = null;
+        }
+      }
+
+      // 描画実行
+      drawOni();
+      drawYoichi();
+      drawTrajectory();
+      drawArrow();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function onKillOni() {
+      kills++;
+      killCountEl.innerText = kills;
+      setTimeout(() => {
+        initOni();
+      }, 1500);
+    }
+
+    function resetGame() {
+      kills = 0;
+      killCountEl.innerText = kills;
+      resetBtn.style.display = 'none';
+      initOni();
+    }
+
+    // 起動処理
+    window.onload = () => {
+      resize();
+      initOni();
+      setupInput();
+      gameLoop();
+    };
+  </script>
+</body>
+</html>
