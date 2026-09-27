@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>与一の鬼退治 - 弓矢ゲーム</title>
+  <title>台湾夜市 - 射的ゲーム</title>
   <style>
     * {
       box-sizing: border-box;
-      touch-action: none; /* タッチイベントのデフォルト動作を無効化 */
+      touch-action: none;
       user-select: none;
       -webkit-user-select: none;
     }
     body {
       margin: 0;
       padding: 0;
-      font-family: 'Hiragino Maru Gothic ProN', sans-serif;
-      background: linear-gradient(to bottom, #1e293b, #0f172a);
-      color: white;
+      font-family: 'Hiragino Maru Gothic ProN', 'PingFang TC', sans-serif;
+      background: #0f051d;
+      color: #fff;
       height: 100vh;
       overflow: hidden;
       display: flex;
@@ -24,98 +24,329 @@
       align-items: center;
     }
 
-    /* UIヘッダー */
+    /* 台湾夜市風ヘッダー */
     .header {
       width: 100%;
-      max-width: 500px;
-      padding: 10px 20px;
+      max-width: 480px;
+      padding: 8px 15px;
+      background: linear-gradient(90deg, #b91c1c, #831843);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      border-bottom: 3px solid #f59e0b;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
       z-index: 10;
     }
-    .title { font-size: 18px; font-weight: bold; color: #f59e0b; margin: 0; }
-    .score { font-size: 16px; font-weight: bold; background: rgba(255,255,255,0.1); padding: 5px 15px; border-radius: 20px; }
+    .title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #fef08a;
+      text-shadow: 0 0 8px #f59e0b;
+      margin: 0;
+    }
+    .status-bar {
+      display: flex;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .coin-val { color: #facc15; }
+    .pt-val { color: #38bdf8; }
 
-    /* ゲームステージ（キャンバスエリア） */
-    .stage-container {
+    /* メインゲームコンテナ */
+    .game-container {
       position: relative;
       width: 100%;
       max-width: 450px;
-      height: 80vh;
-      background: linear-gradient(to bottom, #0284c7 0%, #38bdf8 60%, #15803d 60%, #166534 100%);
-      border-radius: 20px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      height: calc(100vh - 50px);
+      background: #18092b;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
+    /* 夜市アーケードHUB（ゲーム選択） */
+    #hub-screen {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle, #2e1065 0%, #0f051d 100%);
+      z-index: 30;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .hub-title {
+      font-size: 26px;
+      color: #f43f5e;
+      text-shadow: 0 0 10px #f43f5e;
+      margin-bottom: 5px;
+    }
+    .hub-subtitle { font-size: 12px; color: #cbd5e1; margin-bottom: 20px; }
+    .game-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      width: 100%;
+    }
+    .game-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid #f59e0b;
+      border-radius: 15px;
+      padding: 15px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+    }
+    .game-card.locked {
+      border-color: #475569;
+      opacity: 0.6;
+    }
+    .game-icon { font-size: 40px; }
+    .game-name { font-weight: bold; margin-top: 5px; font-size: 14px; color: #fef08a; }
+    .game-cost { font-size: 11px; color: #cbd5e1; }
+
+    /* 射的ゲームキャンバスエリア */
     canvas {
       width: 100%;
       height: 100%;
       display: block;
     }
 
-    /* メッセージ・モーダル */
-    .msg-overlay {
+    /* 銃の直感操作UIバー */
+    .controls-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 140px;
+      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      pointer-events: none;
+    }
+    .control-group { pointer-events: auto; }
+
+    /* 左側：銃身エレベート（上下照準スライダー） */
+    .aim-slider-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #fde047;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .aim-slider {
+      -webkit-appearance: slider-vertical;
+      width: 30px;
+      height: 90px;
+      accent-color: #ef4444;
+    }
+
+    /* 右側：トリガー＆コッキングボタン */
+    .trigger-btn {
+      width: 85px;
+      height: 85px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ef4444 0%, #991b1b 100%);
+      border: 4px solid #fef08a;
+      color: white;
+      font-weight: bold;
+      font-size: 15px;
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .trigger-btn:active {
+      transform: scale(0.95);
+      background: radial-gradient(circle, #dc2626 0%, #7f1d1d 100%);
+    }
+
+    /* 戻るボタン */
+    .btn-back {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 5px 12px;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid #f59e0b;
+      color: white;
+      border-radius: 12px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 20;
+    }
+
+    /* ポップアップメッセージ */
+    .hit-popup {
       position: absolute;
       top: 30%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 32px;
+      font-size: 28px;
       font-weight: bold;
-      color: #fde047;
-      text-shadow: 0 4px 10px rgba(0,0,0,0.8);
+      color: #fef08a;
+      text-shadow: 0 0 10px #f59e0b, 0 0 20px #ef4444;
       pointer-events: none;
       opacity: 0;
-      transition: opacity 0.2s, transform 0.2s;
+      transition: all 0.3s ease-out;
+      z-index: 25;
     }
-    .msg-overlay.show {
+    .hit-popup.show {
       opacity: 1;
-      transform: translate(-50%, -60%) scale(1.2);
-    }
-
-    /* 再戦ボタン */
-    .btn-reset {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 12px 30px;
-      font-size: 18px;
-      font-weight: bold;
-      background: #ef4444;
-      color: white;
-      border: none;
-      border-radius: 25px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      cursor: pointer;
-      display: none;
-      z-index: 20;
+      transform: translate(-50%, -80%) scale(1.2);
     }
   </style>
 </head>
 <body>
 
+  <!-- ヘッダーUI -->
   <div class="header">
-    <h1 class="title">🏹 よいちの おにたいじ</h1>
-    <div class="score">たおした数: <span id="kill-count">0</span></div>
+    <h1 class="title">🏮 台灣夜市 遊戲樂園</h1>
+    <div class="status-bar">
+      <div>🪙 コイン: <span id="coin-txt" class="coin-val">100</span></div>
+      <div>⭐ PT: <span id="pt-txt" class="pt-val">0</span></div>
+    </div>
   </div>
 
-  <div class="stage-container">
+  <div class="game-container">
+
+    <!-- HUB画面（ゲーム選択・解放画面） -->
+    <div id="hub-screen">
+      <div class="hub-title">夜市遊樂場</div>
+      <div class="hub-subtitle">お小遣い（コイン）で遊んでポイントを貯めよう！</div>
+
+      <div class="game-grid">
+        <div class="game-card" onclick="startShootingGame()">
+          <div class="game-icon">🎯</div>
+          <div class="game-name">夜市 射擊大戰</div>
+          <div class="game-cost">1プレイ: 10 コイン</div>
+        </div>
+        <div class="game-card locked">
+          <div class="game-icon">🐟</div>
+          <div class="game-name">金魚すくい</div>
+          <div class="game-cost">1000 PTで解放</div>
+        </div>
+        <div class="game-card locked">
+          <div class="game-icon">🔮</div>
+          <div class="game-name">スマートボール</div>
+          <div class="game-cost">2500 PTで解放</div>
+        </div>
+        <div class="game-card locked">
+          <div class="game-icon">⭕</div>
+          <div class="game-name">夜市 輪投げ</div>
+          <div class="game-cost">5000 PTで解放</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 射的ゲームプレイ画面 -->
+    <button class="btn-back" onclick="showHub()">🏠 屋台一覧</button>
+    <div id="hit-msg" class="hit-popup">獲得！</div>
     <canvas id="gameCanvas"></canvas>
-    <div id="hit-msg" class="msg-overlay">きゅうしょ に めいちゅう！</div>
-    <button id="reset-btn" class="btn-reset" onclick="resetGame()">もう一度あそぶ</button>
+
+    <!-- 直感操作UI -->
+    <div class="controls-overlay" id="controls" style="display:none;">
+      <div class="control-group aim-slider-container">
+        <span>じゅうこう</span>
+        <input type="range" min="0" max="100" value="50" class="aim-slider" id="aimSlider" orient="vertical">
+      </div>
+
+      <div class="control-group">
+        <div class="trigger-btn" id="triggerBtn">
+          <span>撃つ！</span>
+          <span style="font-size:10px; font-weight:normal; opacity:0.8;">長押しでパワー</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
+    // --- グローバル状態（お小遣い＆ポイント） ---
+    let coins = 100;
+    let points = 0;
+
+    const coinEl = document.getElementById('coin-txt');
+    const ptEl = document.getElementById('pt-txt');
+    const hubScreen = document.getElementById('hub-screen');
+    const controls = document.getElementById('controls');
+    const hitMsg = document.getElementById('hit-msg');
+
+    function updateUI() {
+      coinEl.innerText = coins;
+      ptEl.innerText = points;
+    }
+
+    function showHub() {
+      hubScreen.style.display = 'flex';
+      controls.style.display = 'none';
+      isPlaying = false;
+    }
+
+    // --- Web Audio API（効果音・BGM generation） ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(type) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'shoot') { // 射擊音（ポン！）
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+      } else if (type === 'hit') { // 命中标的音
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.08); // E5
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+      } else if (type === 'rare') { // レアゲットファンファーレ
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+      }
+    }
+
+    // --- 射的ゲーム本体 ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const killCountEl = document.getElementById('kill-count');
-    const hitMsgEl = document.getElementById('hit-msg');
-    const resetBtn = document.getElementById('reset-btn');
+    const aimSlider = document.getElementById('aimSlider');
+    const triggerBtn = document.getElementById('triggerBtn');
 
-    // 画面サイズの調整
     let W, H;
+    let isPlaying = false;
+    let bullets = [];
+    let power = 0;
+    let powerTimer = null;
+
+    // 6段階の景品設定
+    const PRIZE_TYPES = [
+      { rank: 1, name: "芒果冰 (かき氷)", color: "#facc15", size: 45, hp: 1, pt: 100, speed: 0, icon: "🍧" },
+      { rank: 2, name: "小籠包", color: "#fde047", size: 38, hp: 1, pt: 200, speed: 0.8, icon: "🥟" },
+      { rank: 3, name: "珍珠奶茶 (タピオカ)", color: "#fb923c", size: 35, hp: 2, pt: 400, speed: 1.2, icon: "🧋" },
+      { rank: 4, name: "台灣燈籠 (提灯)", color: "#ef4444", size: 30, hp: 2, pt: 700, speed: 2.0, icon: "🏮" },
+      { rank: 5, name: "熊公仔 (大ベア)", color: "#a855f7", size: 50, hp: 4, pt: 1200, speed: 1.5, icon: "🧸" },
+      { rank: 6, name: "黃金神龍 (金龍像)", color: "#eab308", size: 25, hp: 3, pt: 2000, speed: 3.5, icon: "🐉" }
+    ];
+
+    let prizes = [];
+
     function resize() {
       const rect = canvas.getBoundingClientRect();
       W = canvas.width = rect.width;
@@ -123,406 +354,248 @@
     }
     window.addEventListener('resize', resize);
 
-    // 音声効果（Web Audio API）
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playSfx(type) {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      if (type === 'shoot') { // 弓を放つ音
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.15);
-      } else if (type === 'critical') { // 急所ヒット音
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-        osc.frequency.setValueAtTime(300, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-      } else if (type === 'hit') { // 通常ヒット音
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+    function startShootingGame() {
+      if (coins < 10) {
+        alert("コインが足りません！");
+        return;
       }
+      coins -= 10;
+      updateUI();
+
+      hubScreen.style.display = 'none';
+      controls.style.display = 'flex';
+      isPlaying = true;
+      resize();
+      initPrizes();
+      gameLoop();
     }
 
-    // 音声読み上げ
-    function speak(text) {
-      window.speechSynthesis.cancel();
-      const uttr = new SpeechSynthesisUtterance(text);
-      uttr.lang = 'ja-JP';
-      uttr.rate = 1.0;
-      window.speechSynthesis.speak(uttr);
-    }
+    // 棚に景品を配置
+    function initPrizes() {
+      prizes = [];
+      const shelves = [H * 0.22, H * 0.42, H * 0.62]; // 3段の棚
 
-    // ゲーム状態
-    let kills = 0;
-    let arrow = null; // 飛行中の矢
-    let isPulling = false;
-    let pullStart = { x: 0, y: 0 };
-    let pullCurrent = { x: 0, y: 0 };
-
-    // 那須与一（プレイヤー）の配置位置
-    const yoichi = { x: 0, y: 0 };
-
-    // 鬼オブジェクト
-    let oni = {
-      x: 0, y: 0,
-      radius: 35,
-      hp: 3,
-      maxHp: 3,
-      vx: 2,
-      isDead: false
-    };
-
-    function initOni() {
-      oni.x = W * 0.2 + Math.random() * (W * 0.6);
-      oni.y = H * 0.25;
-      oni.hp = 3;
-      oni.maxHp = 3;
-      oni.vx = (Math.random() > 0.5 ? 1 : -1) * (1.5 + kills * 0.3); // たおす毎に速くなる
-      oni.isDead = false;
-    }
-
-    // 操作（ひっぱり）処理
-    function setupInput() {
-      const getPos = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: clientX - rect.left, y: clientY - rect.top };
-      };
-
-      const startPull = (e) => {
-        if (arrow || oni.isDead) return;
-        const pos = getPos(e);
-        // 与一くんの近くをタッチしたか判定
-        if (Math.hypot(pos.x - yoichi.x, pos.y - yoichi.y) < 80) {
-          isPulling = true;
-          pullStart = { x: yoichi.x, y: yoichi.y };
-          pullCurrent = pos;
+      shelves.forEach((shelfY, shelfIndex) => {
+        const count = 3;
+        for (let i = 0; i < count; i++) {
+          const rankIndex = Math.min(shelfIndex * 2 + (i % 2), PRIZE_TYPES.length - 1);
+          const type = PRIZE_TYPES[rankIndex];
+          prizes.push({
+            ...type,
+            x: (W / (count + 1)) * (i + 1),
+            y: shelfY - type.size / 2,
+            maxHp: type.hp,
+            currentHp: type.hp,
+            dir: i % 2 === 0 ? 1 : -1,
+            shelfY: shelfY
+          });
         }
-      };
-
-      const movePull = (e) => {
-        if (!isPulling) return;
-        pullCurrent = getPos(e);
-      };
-
-      const endPull = () => {
-        if (!isPulling) return;
-        isPulling = false;
-
-        // 引いたベクトルから飛距離と角度を計算
-        const dx = pullStart.x - pullCurrent.x;
-        const dy = pullStart.y - pullCurrent.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist > 20) { // 最低限ひっぱった場合発射
-          const speed = Math.min(dist * 0.18, 22);
-          const angle = Math.atan2(dy, dx);
-          
-          arrow = {
-            x: yoichi.x,
-            y: yoichi.y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            angle: angle
-          };
-          playSfx('shoot');
-        }
-      };
-
-      canvas.addEventListener('mousedown', startPull);
-      canvas.addEventListener('mousemove', movePull);
-      canvas.addEventListener('mouseup', endPull);
-
-      canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startPull(e); });
-      canvas.addEventListener('touchmove', (e) => { e.preventDefault(); movePull(e); });
-      canvas.addEventListener('touchend', endPull);
+      });
     }
 
-    // 描画：那須与一
-    function drawYoichi() {
-      ctx.save();
-      ctx.translate(yoichi.x, yoichi.y);
+    // 操作処理（コッキング＆トリガー）
+    let isPressing = false;
+    triggerBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      startPower();
+    });
+    triggerBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      shoot();
+    });
+    triggerBtn.addEventListener('mousedown', startPower);
+    triggerBtn.addEventListener('mouseup', shoot);
 
-      // 着物・陣羽織
-      ctx.fillStyle = '#1e3a8a'; // 紺色の着物
-      ctx.beginPath();
-      ctx.arc(0, 15, 20, 0, Math.PI * 2);
-      ctx.fill();
+    function startPower() {
+      if (!isPlaying) return;
+      isPressing = true;
+      power = 10;
+      powerTimer = setInterval(() => {
+        if (power < 100) power += 5;
+      }, 30);
+    }
 
-      // 顔
-      ctx.fillStyle = '#ffedd5';
-      ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
-      ctx.fill();
+    function shoot() {
+      if (!isPressing || !isPlaying) return;
+      clearInterval(powerTimer);
+      isPressing = false;
 
-      // 髪型・烏帽子
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(0, -6, 18, Math.PI, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(-8, -25, 16, 15); // 烏帽子
+      const sliderVal = parseInt(aimSlider.value);
+      // スライダー（0~100）から発射角度を計算
+      const angle = -Math.PI * 0.15 - (sliderVal / 100) * (Math.PI * 0.35);
+      const speed = 12 + (power / 100) * 15;
 
-      // 目
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(-6, -2, 2.5, 0, Math.PI * 2);
-      ctx.arc(6, -2, 2.5, 0, Math.PI * 2);
-      ctx.fill();
+      bullets.push({
+        x: W / 2,
+        y: H - 80,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 6
+      });
 
-      // 和風弓
-      ctx.strokeStyle = '#78350f';
-      ctx.lineWidth = 4;
+      playSound('shoot');
+      power = 0;
+    }
+
+    // 描画：台湾夜市風の背景と棚
+    function drawBackground() {
+      // 提灯とネオン背景
+      ctx.fillStyle = "#18092b";
+      ctx.fillRect(0, 0, W, H);
+
+      // 木製レトロ棚（3段）
+      const shelves = [H * 0.22, H * 0.42, H * 0.62];
+      ctx.fillStyle = "#78350f";
+      ctx.shadowColor = "#000";
+      ctx.shadowBlur = 10;
+      shelves.forEach(y => {
+        ctx.fillRect(10, y, W - 20, 12);
+        ctx.fillStyle = "#451a03";
+        ctx.fillRect(10, y + 12, W - 20, 6);
+        ctx.fillStyle = "#78350f";
+      });
+      ctx.shadowBlur = 0;
+
+      // 台湾夜市看板
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(W / 2 - 60, 10, 120, 30);
+      ctx.strokeStyle = "#fde047";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(W / 2 - 58, 12, 116, 26);
+      ctx.fillStyle = "#fde047";
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("🏮 繁華夜市 🏮", W / 2, 30);
+    }
+
+    // 描画：レーザー照準ガイド
+    function drawAimGuide() {
+      const sliderVal = parseInt(aimSlider.value);
+      const angle = -Math.PI * 0.15 - (sliderVal / 100) * (Math.PI * 0.35);
+
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.arc(0, 0, 35, -Math.PI * 0.6, Math.PI * 0.6);
+      ctx.moveTo(W / 2, H - 80);
+      ctx.lineTo(W / 2 + Math.cos(angle) * 300, (H - 80) + Math.sin(angle) * 300);
       ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
-      // 弦（ひっぱり中）
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      const topX = 35 * Math.cos(-Math.PI * 0.6);
-      const topY = 35 * Math.sin(-Math.PI * 0.6);
-      const botX = 35 * Math.cos(Math.PI * 0.6);
-      const botY = 35 * Math.sin(Math.PI * 0.6);
+    // 描画：ライフル（プレイヤー銃身）
+    function drawRifle() {
+      ctx.save();
+      ctx.translate(W / 2, H - 60);
 
-      ctx.moveTo(topX, topY);
-      if (isPulling) {
-        // 指の位置へ弦がしなる
-        const localX = pullCurrent.x - yoichi.x;
-        const localY = pullCurrent.y - yoichi.y;
-        ctx.lineTo(localX, localY);
-        ctx.lineTo(botX, botY);
-      } else {
-        ctx.lineTo(botX, botY);
+      const sliderVal = parseInt(aimSlider.value);
+      const angle = -Math.PI * 0.15 - (sliderVal / 100) * (Math.PI * 0.35);
+      ctx.rotate(angle + Math.PI / 2);
+
+      // 木製ストック
+      ctx.fillStyle = "#92400e";
+      ctx.fillRect(-8, 10, 16, 50);
+
+      // 金属銃身
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(-4, -50, 8, 60);
+
+      // パワーゲージ表示（チャージ時）
+      if (power > 0) {
+        ctx.fillStyle = "#ef4444";
+        ctx.fillRect(-6, 0, 12, -(power / 100) * 40);
       }
-      ctx.stroke();
 
       ctx.restore();
     }
 
-    // 描画：鬼（赤鬼）
-    function drawOni() {
-      if (oni.isDead) return;
-
-      ctx.save();
-      ctx.translate(oni.x, oni.y);
-
-      // 体（胴体）
-      ctx.fillStyle = '#dc2626';
-      ctx.beginPath();
-      ctx.arc(0, 15, oni.radius * 0.8, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 頭部（急所エリア）
-      ctx.fillStyle = '#ef4444';
-      ctx.beginPath();
-      ctx.arc(0, -10, oni.radius * 0.7, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 鬼の角（頭頂部）
-      ctx.fillStyle = '#f59e0b';
-      ctx.beginPath();
-      ctx.moveTo(-8, -25);
-      ctx.lineTo(0, -45);
-      ctx.lineTo(8, -25);
-      ctx.closePath();
-      ctx.fill();
-
-      // 目と口
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(-10, -12, 6, 0, Math.PI * 2);
-      ctx.arc(10, -12, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(-10, -12, 3, 0, Math.PI * 2);
-      ctx.arc(10, -12, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 牙
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-12, 5); ctx.lineTo(12, 5);
-      ctx.stroke();
-
-      // HPバー表示
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(-25, -55, 50, 6);
-      ctx.fillStyle = '#22c55e';
-      ctx.fillRect(-25, -55, (50 * (oni.hp / oni.maxHp)), 6);
-
-      ctx.restore();
-    }
-
-    // 描画：軌道予測線（ひっぱり中）
-    function drawTrajectory() {
-      if (!isPulling) return;
-
-      const dx = pullStart.x - pullCurrent.x;
-      const dy = pullStart.y - pullCurrent.y;
-      const speed = Math.min(Math.hypot(dx, dy) * 0.18, 22);
-      const angle = Math.atan2(dy, dx);
-
-      let simX = yoichi.x;
-      let simY = yoichi.y;
-      let simVx = Math.cos(angle) * speed;
-      let simVy = Math.sin(angle) * speed;
-
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      for (let i = 0; i < 15; i++) {
-        simX += simVx;
-        simY += simVy;
-        simVy += 0.25; // 重力影響
-        ctx.beginPath();
-        ctx.arc(simX, simY, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // 描画：矢
-    function drawArrow() {
-      if (!arrow) return;
-
-      ctx.save();
-      ctx.translate(arrow.x, arrow.y);
-      ctx.rotate(arrow.angle);
-
-      // 矢のシャフト（竹）
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-20, 0); ctx.lineTo(15, 0);
-      ctx.stroke();
-
-      // 矢尻（鉄）
-      ctx.fillStyle = '#94a3b8';
-      ctx.beginPath();
-      ctx.moveTo(15, -4); ctx.lineTo(25, 0); ctx.lineTo(15, 4);
-      ctx.closePath();
-      ctx.fill();
-
-      // 矢羽（白）
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(-20, 0); ctx.lineTo(-25, -5); ctx.lineTo(-18, 0); ctx.lineTo(-25, 5);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.restore();
-    }
-
-    // メッセージ表示アニメーション
-    function showHitMsg(text) {
-      hitMsgEl.innerText = text;
-      hitMsgEl.classList.add('show');
-      setTimeout(() => hitMsgEl.classList.remove('show'), 1200);
+    function showPopup(text) {
+      hitMsg.innerText = text;
+      hitMsg.classList.add('show');
+      setTimeout(() => hitMsg.classList.remove('show'), 1000);
     }
 
     // メインゲームループ
     function gameLoop() {
-      ctx.clearRect(0, 0, W, H);
+      if (!isPlaying) return;
 
-      // 与一の位置設定（画面下部中央）
-      yoichi.x = W / 2;
-      yoichi.y = H - 80;
+      drawBackground();
+      drawAimGuide();
 
-      // 鬼の移動更新
-      if (!oni.isDead) {
-        oni.x += oni.vx;
-        if (oni.x - oni.radius < 10 || oni.x + oni.radius > W - 10) {
-          oni.vx *= -1; // 壁で跳ね返り
-        }
-      }
-
-      // 矢の位置更新と当たり判定
-      if (arrow) {
-        arrow.x += arrow.vx;
-        arrow.y += arrow.vy;
-        arrow.vy += 0.25; // 重力で放物線を描く
-        arrow.angle = Math.atan2(arrow.vy, arrow.vx);
-
-        // 鬼との当たり判定
-        if (!oni.isDead) {
-          const distToCenter = Math.hypot(arrow.x - oni.x, arrow.y - oni.y);
-          const distToHead = Math.hypot(arrow.x - oni.x, arrow.y - (oni.y - 20)); // 頭部（急所）
-
-          if (distToHead < 18) {
-            // 急所（一撃必殺！）
-            oni.hp = 0;
-            oni.isDead = true;
-            arrow = null;
-            playSfx('critical');
-            showHitMsg("🎯 急所にあたった！一撃必殺！");
-            speak("すごい！きゅうしょに めいちゅう！");
-            onKillOni();
-          } else if (distToCenter < oni.radius) {
-            // 胴体ヒット
-            oni.hp -= 1;
-            arrow = null;
-            if (oni.hp <= 0) {
-              oni.isDead = true;
-              playSfx('critical');
-              showHitMsg("おにを たおした！");
-              speak("やったね！おにを たおしたよ！");
-              onKillOni();
-            } else {
-              playSfx('hit');
-              showHitMsg("ヒット！");
-            }
+      // 景品の移動と描画
+      prizes.forEach((p, idx) => {
+        if (p.speed > 0) {
+          p.x += p.speed * p.dir;
+          if (p.x - p.size / 2 < 20 || p.x + p.size / 2 > W - 20) {
+            p.dir *= -1;
           }
         }
 
-        // 画面外に飛んで行った場合
-        if (arrow && (arrow.x < -50 || arrow.x > W + 50 || arrow.y > H + 50)) {
-          arrow = null;
-        }
-      }
+        // 景品本体（アイコン＋HP）
+        ctx.font = `${p.size}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(p.icon, p.x, p.y);
 
-      // 描画実行
-      drawOni();
-      drawYoichi();
-      drawTrajectory();
-      drawArrow();
+        // HPゲージ（多重ヒットが必要な場合）
+        if (p.maxHp > 1) {
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.fillRect(p.x - 15, p.y - p.size / 2 - 8, 30, 4);
+          ctx.fillStyle = "#22c55e";
+          ctx.fillRect(p.x - 15, p.y - p.size / 2 - 8, (30 * (p.currentHp / p.maxHp)), 4);
+        }
+      });
+
+      // 弾の移動と判定
+      bullets.forEach((b, bIdx) => {
+        b.x += b.vx;
+        b.y += b.vy;
+
+        // 弾の描画（BB弾）
+        ctx.fillStyle = "#fde047";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 当たり判定
+        prizes.forEach((p, pIdx) => {
+          const dist = Math.hypot(b.x - p.x, b.y - p.y);
+          if (dist < p.size / 2 + b.radius) {
+            p.currentHp -= 1;
+            bullets.splice(bIdx, 1);
+
+            if (p.currentHp <= 0) {
+              // 景品ゲット！
+              playSound(p.rank >= 5 ? 'rare' : 'hit');
+              points += p.pt;
+              coins += Math.floor(p.pt / 10); // コイン還元
+              updateUI();
+              showPopup(`🎯 ${p.name} GET! +${p.pt}PT`);
+
+              // 景品リスポーン
+              setTimeout(() => {
+                p.currentHp = p.maxHp;
+                p.x = W * 0.2 + Math.random() * (W * 0.6);
+              }, 1500);
+            } else {
+              playSound('hit');
+            }
+          }
+        });
+      });
+
+      // 画面外の弾削除
+      bullets = bullets.filter(b => b.x > 0 && b.x < W && b.y > 0 && b.y < H);
+
+      drawRifle();
 
       requestAnimationFrame(gameLoop);
     }
 
-    function onKillOni() {
-      kills++;
-      killCountEl.innerText = kills;
-      setTimeout(() => {
-        initOni();
-      }, 1500);
-    }
-
-    function resetGame() {
-      kills = 0;
-      killCountEl.innerText = kills;
-      resetBtn.style.display = 'none';
-      initOni();
-    }
-
-    // 起動処理
+    // 初期化
     window.onload = () => {
       resize();
-      initOni();
-      setupInput();
-      gameLoop();
+      updateUI();
     };
   </script>
 </body>
